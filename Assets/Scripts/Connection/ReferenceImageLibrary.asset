@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 848409ee8ba454f42a5ddff137688a27, type: 3}
+  m_Name: ReferenceImageLibrary
+  m_EditorClassIdentifier: 
+  m_GuidLow: 5232423236137566349
+  m_GuidHigh: 7225784528084821424
+  m_Images:
+  - m_SerializedGuid:
+      m_GuidLow: 5162689105544033985
+      m_GuidHigh: 7436712846603324825
+    m_SerializedTextureGuid:
+      m_GuidLow: 14791160913246257672
+      m_GuidHigh: 2181772038548777899
+    m_Size: {x: 0.3080957, y: 0.07}
+    m_SpecifySize: 1
+    m_Name: 4507px-TeamViewer_logo.svg
+    m_Texture: {fileID: 0}

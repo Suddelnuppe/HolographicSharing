@@ -16,7 +16,7 @@ MonoBehaviour:
   experienceSettingsProfile: {fileID: 11400000, guid: 584d9b4de7af1d94eb254e4cd74218a9, type: 2}
   targetExperienceScale: 3
   enableCameraSystem: 1
-  cameraProfile: {fileID: 11400000, guid: 0447581e7bd59f64fbb28151c65a3dc4, type: 2}
+  cameraProfile: {fileID: 11400000, guid: 9b4dfc97c2d0540458e179e55babf5e3, type: 2}
   cameraSystemType:
     reference: Microsoft.MixedReality.Toolkit.CameraSystem.MixedRealityCameraSystem,
       Microsoft.MixedReality.Toolkit.Services.CameraSystem

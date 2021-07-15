@@ -1,125 +1,144 @@
 using System;
+using System.Collections.Generic;
 using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
-using Frontline.AR;
-using Frontline.Services.Audio;
-using Frontline.Services.Notification;
 using MQTTnet;
 using MQTTnet.Client;
 using MQTTnet.Client.Options;
-using Newtonsoft.Json;
 using UnityEngine;
-using UnityEngine.UI;
+using UnityEngine.Serialization;
 
 namespace HolographicSharing
 {
-    public class MQTTConnection : MonoBehaviour
+    public class MqttConnection : MonoBehaviour
     {
-        private IMqttClient mqttClient;
-        
-        private INotificationService notificationService;
+        private IMqttClient _mqttClient;
 
-        private SceneManager _sceneManager;
+        private string _ownGuid;
 
-        private Guid ownGUID;
-
-        private void Update()
-        {
-        }
-
-        private void OnDestroy()
-        {
-            Destroy(_sceneManager);
-        }
+        private Queue<HolographicAction> _messageQueue;
 
         private void Start()
         {
-            ownGUID = new Guid();
+            _messageQueue = new Queue<HolographicAction>();
             
-            gameObject.AddComponent<SceneManager>();
-            _sceneManager = gameObject.GetComponent<SceneManager>();
+            _ownGuid = Guid.NewGuid().ToString();
             
             var factory = new MqttFactory();
-            mqttClient = factory.CreateMqttClient();
+            _mqttClient = factory.CreateMqttClient();
             
             var options = new MqttClientOptionsBuilder()
-                .WithClientId("clientId-wVpslsS8U1")
+#if UNITY_IOS
+                .WithClientId("clientId-x4nSxDGOJq")
+#else
+                .WithClientId("clientId-EBGvBoqWR2")
+#endif
                 .WithWebSocketServer("broker.mqttdashboard.com:8000/mqtt")
                 .WithCleanSession()
                 .WithKeepAlivePeriod(new TimeSpan(60))
                 .Build();
             
-            
-                
-            mqttClient.UseConnectedHandler(async e =>
+            _mqttClient.UseConnectedHandler(async e =>
             {
-                await mqttClient.SubscribeAsync(new MqttTopicFilterBuilder().WithTopic("testtopic/holgertest123").Build());
+                await _mqttClient.SubscribeAsync(new MqttTopicFilterBuilder().WithTopic("testtopic/objectSpawnTest123").Build());
             });
             
-            mqttClient.UseApplicationMessageReceivedHandler(e =>
+            _mqttClient.UseApplicationMessageReceivedHandler(e =>
             {
-                MQTTMessage message = JsonConvert.DeserializeObject<MQTTMessage>(Encoding.UTF8.GetString(e.ApplicationMessage.Payload));
-
-                if (message.ClientID != ownGUID)
+                MqttMessage message = JsonUtility.FromJson<MqttMessage>(Encoding.UTF8.GetString(e.ApplicationMessage.Payload));
+                
+                if (!message.clientID.Equals(_ownGuid))
                 {
-                    switch (message.Type)
+                    switch (message.type)
                     {
-                        case OperationType.CREATE:
-                            CreateObject(message.ObjectType, message.ObjectID.ToString(), message.Transform);
+                        case OperationType.Create:
+                            CreateObject(message.objectType, message.objectID, message.position, message.rotation, message.scale);
                             break;
-                        case OperationType.DELETE:
-                            DeleteObject((message.ObjectID.ToString()));
+                        case OperationType.Delete:
+                            DeleteObject((message.objectID));
                             break;
-                        case OperationType.MANIPULATE:
+                        case OperationType.Manipulate:
+                            ManipulateObject(message.objectID, message.position, message.rotation, message.scale);
                             break;
                     }
                 }
             });
 
-            mqttClient.ConnectAsync(options, CancellationToken.None);
+            _mqttClient.ConnectAsync(options, CancellationToken.None);
         }
 
         private void OnApplicationQuit()
         {
-            mqttClient.DisconnectAsync();
+            _mqttClient.DisconnectAsync();
         }
 
-        public async void SpawnObjectMessage(ObjectType objectType)
+        public async void SpawnObjectMessage(ObjectType objectType, Vector3 spawnPosition, string objectID)
         {
-            MQTTMessage mqttMessage = new MQTTMessage();
-            mqttMessage.Timestamp = GetCurrentTimestamp();
-            mqttMessage.ClientID = ownGUID;
-            mqttMessage.ObjectType = objectType;
-            mqttMessage.ObjectID = new Guid();
-            mqttMessage.Type = OperationType.CREATE;
+            MqttMessage mqttMessage = new MqttMessage
+            {
+                timestamp = GetCurrentTimestamp(),
+                clientID = _ownGuid,
+                objectType = objectType,
+                objectID = objectID,
+                type = OperationType.Create,
+                position = spawnPosition,
+                scale = new Vector3(.2f, .2f, .2f)
+            };
+
+            string messageJson = JsonUtility.ToJson(mqttMessage);
             
             var message = new MqttApplicationMessageBuilder()
-                .WithTopic("MyTopic")
-                .WithPayload(mqttMessage)
+                .WithTopic("testtopic/objectSpawnTest123")
+                .WithPayload(messageJson)
                 .WithExactlyOnceQoS()
-                .WithRetainFlag()
                 .Build();
 
-            await mqttClient.PublishAsync(message, CancellationToken.None);
+            await _mqttClient.PublishAsync(message, CancellationToken.None);
+        }
+
+        public async void ManipulateObjectMessage(string objectID, Transform objectTransform)
+        {
+            MqttMessage mqttMessage = new MqttMessage
+            {
+                timestamp = GetCurrentTimestamp(),
+                clientID = _ownGuid,
+                objectID = objectID,
+                type = OperationType.Manipulate,
+                position = objectTransform.position,
+                rotation = objectTransform.rotation,
+                scale = objectTransform.localScale
+            };
+
+            string messageJson = JsonUtility.ToJson(mqttMessage);
+            
+            var message = new MqttApplicationMessageBuilder()
+                .WithTopic("testtopic/objectSpawnTest123")
+                .WithPayload(messageJson)
+                .WithExactlyOnceQoS()
+                .Build();
+
+            await _mqttClient.PublishAsync(message, CancellationToken.None);
         }
 
         public async void DeleteObjectMessage(string objectID)
         {
-            MQTTMessage mqttMessage = new MQTTMessage();
-            mqttMessage.Timestamp = GetCurrentTimestamp();
-            mqttMessage.ClientID = ownGUID;
-            mqttMessage.ObjectID = new Guid(objectID);
-            mqttMessage.Type = OperationType.DELETE;
+            MqttMessage mqttMessage = new MqttMessage
+            {
+                timestamp = GetCurrentTimestamp(),
+                clientID = _ownGuid,
+                objectID = objectID,
+                type = OperationType.Delete
+            };
+
+            string messageJson = JsonUtility.ToJson(mqttMessage);
             
             var message = new MqttApplicationMessageBuilder()
-                .WithTopic("MyTopic")
-                .WithPayload(mqttMessage)
+                .WithTopic("testtopic/objectSpawnTest123")
+                .WithPayload(messageJson)
                 .WithExactlyOnceQoS()
-                .WithRetainFlag()
                 .Build();
 
-            await mqttClient.PublishAsync(message, CancellationToken.None);
+            await _mqttClient.PublishAsync(message, CancellationToken.None);
         }
 
         private int GetCurrentTimestamp()
@@ -128,61 +147,67 @@ namespace HolographicSharing
             return (int)(DateTime.UtcNow - epochStart).TotalSeconds;
         }
 
-        private void CreateObject(ObjectType objectType, string objectID, Transform objectTransform)
+        private void CreateObject(ObjectType objectType, string objectID, Vector3 position, Quaternion rotation, Vector3 scale)
         {
             switch (objectType)
             {
-                case ObjectType.SQUARE:
-                    _sceneManager.SpawnCube(objectID, objectTransform);
+                case ObjectType.Square:
+                    SpawnCubeAction cubeAction = new SpawnCubeAction(objectID, position, rotation, scale);
+                    _messageQueue.Enqueue(cubeAction);
                     break;
-                case ObjectType.SPHERE:
-                    _sceneManager.SpawnSphere(objectID, objectTransform);
+                case ObjectType.Sphere:
+                    SpawnSphereAction sphereAction = new SpawnSphereAction(objectID, position, rotation, scale);
+                    _messageQueue.Enqueue(sphereAction);
+                    break;
+                case ObjectType.Skeleton:
+                    SpawnSkeletonAction skeletonAction = new SpawnSkeletonAction(objectID, position, rotation, scale);
+                    _messageQueue.Enqueue(skeletonAction);
                     break;
             }
         }
 
         private void DeleteObject(string objectID)
         {
-            _sceneManager.DeleteObject(objectID);
+            DeleteObjectAction deleteObjectAction = new DeleteObjectAction(objectID);
+            _messageQueue.Enqueue(deleteObjectAction);
         }
 
-        private void ManipulateObject(string objectID, Transform newTransform)
+        private void ManipulateObject(string objectID, Vector3 position, Quaternion rotation, Vector3 scale)
         {
-            _sceneManager.ManipulateObject(objectID, newTransform);
+            ManipulateObjectAction manipulateObjectAction = new ManipulateObjectAction(objectID, position, rotation, scale);
+            _messageQueue.Enqueue(manipulateObjectAction);
+        }
+
+        public Queue<HolographicAction> GetCurrentActions()
+        {
+            return _messageQueue;
         }
     }
 
-    public class MQTTMessage
+    [Serializable]
+    public class MqttMessage
     {
-        [JsonProperty("clientID")]
-        public Guid ClientID { get; set; }
-    
-        [JsonProperty("timestamp")]
-        public int Timestamp { get; set; }
-
-        [JsonProperty("type")]
-        public OperationType Type { get; set; }
-    
-        [JsonProperty("transform")]
-        public Transform Transform { get; set; }
-    
-        [JsonProperty("objectType")]
-        public ObjectType ObjectType { get; set; }
-    
-        [JsonProperty("objectID")]
-        public Guid ObjectID { get; set; }
+        [FormerlySerializedAs("ClientID")] public string clientID;
+        [FormerlySerializedAs("Timestamp")] public int timestamp;
+        [FormerlySerializedAs("Type")] public OperationType type;
+        [FormerlySerializedAs("Position")] public Vector3 position;
+        [FormerlySerializedAs("Rotation")] public Quaternion rotation;
+        [FormerlySerializedAs("Scale")] public Vector3 scale;
+        [FormerlySerializedAs("ObjectType")] public ObjectType objectType;
+        [FormerlySerializedAs("ObjectID")] public string objectID;
     }
 
     public enum OperationType : ushort
     {
-        CREATE =  1,
-        DELETE = 2,
-        MANIPULATE = 3
+        Create =  1,
+        Delete = 2,
+        Manipulate = 3
     }
 
     public enum ObjectType : ushort
     {
-        SQUARE = 1,
-        SPHERE = 2,
+        Square = 1,
+        Sphere = 2,
+        Skeleton = 3,
     }
 }
